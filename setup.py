@@ -10,7 +10,7 @@ setup(name='st2g',
       url='https://github.com/camelop/securitytext2graph',
       packages=find_packages(exclude=["*.tests", "*.tests.*",
                                       "tests.*", "tests"]),
-      package_dir={'': 'src'},
+      package_dir={'st2g': 'src'},
       install_requires=[
           "argparse>=1.4.0",
           "sqlparse>=0.3.0",
