@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from setuptools import setup, find_packages
+from setuptools import setup
 
 setup(name='st2g',
       version='0.0',
@@ -8,8 +8,7 @@ setup(name='st2g',
       author='littleRound',
       author_email='lxy9843@gmail.com',
       url='https://github.com/camelop/securitytext2graph',
-      packages=find_packages(exclude=["*.tests", "*.tests.*",
-                                      "tests.*", "tests"]),
+      packages=['st2g'],
       package_dir={'st2g': 'src'},
       install_requires=[
           "argparse>=1.4.0",
