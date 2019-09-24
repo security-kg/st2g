@@ -1,1 +1,1 @@
-#!/usr/bin/env bash
+include src/st2g/rules/*

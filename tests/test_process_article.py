@@ -7,6 +7,8 @@ from pprint import pprint
 
 class TestArticle:
     csv_path = reduce(os.path.join, ['.', 'examples', 'data', 'sql_dump', 'blogs_data_p.csv'])
+    if not os.path.exists(csv_path):
+        pytest.skip("skipping tests without articles", allow_module_level=True)
 
     @pytest.fixture
     def first_ten_article(self, num=10):

@@ -12,10 +12,11 @@ setup(name='st2g',
       url='https://github.com/camelop/securitytext2graph',
       packages=find_packages('src', exclude=["*.tests", "*.tests.*", "tests.*", "tests"]),
       package_dir={'': 'src'},
+      include_package_data=True,
       install_requires=[
           "argparse>=1.4.0",
           "sqlparse>=0.3.0",
-          "spacy>=2.1.0",  # new version uncompatible with neuralcoref
+          "spacy>=2.1.0",
           "graphviz>=0.13",
           # "neuralcoref>=4.0",
       ],

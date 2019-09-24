@@ -5,6 +5,8 @@ from functools import reduce
 
 class TestDummy:
     dummy_path = reduce(os.path.join, ['.', 'examples', 'data', 'input_only', 'dummy.txt'])
+    if not os.path.exists(dummy_path):
+        pytest.skip("skipping tests without dummy", allow_module_level=True)
 
     @pytest.fixture
     def dummy_raw(self):
