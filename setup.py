@@ -13,7 +13,10 @@ setup(name='st2g',
       package_dir={'': 'src'},
       install_requires=[
           "argparse>=1.4.0",
-          "spacy",
+          "sqlparse>=0.3.0",
+          "spacy>=2.1.0",  # new version uncompatible with neuralcoref
+          "graphviz>=0.13",
+          # "neuralcoref>=4.0",
       ],
       tests_require=['pytest'],
       entry_points={
