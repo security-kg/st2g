@@ -7,6 +7,8 @@ class TestReadBlog:
     data_dir = reduce(os.path.join, [".", "examples", "data", "sql_dump"])
     data_source = os.path.join(data_dir, "blogs_data_p.sql")
     data_cache = os.path.join(data_dir, "blogs_data_p.csv")
+    if not os.path.exists(data_source):
+        pytest.skip("skipping tests without Blog source data", allow_module_level=True)
 
     def test_data_source(self):
         print("PATH: ", TestReadBlog.data_source)
