@@ -4,7 +4,7 @@ from functools import reduce
 
 
 class TestDummy:
-    dummy_path = reduce(os.path.join, ['.', 'examples', 'data', 'input_only', 'dummy.txt'])
+    dummy_path = reduce(os.path.join, ['.', 'examples', 'data', 'input_only', 'dummy2.txt'])
     if not os.path.exists(dummy_path):
         pytest.skip("skipping tests without dummy", allow_module_level=True)
 
@@ -27,3 +27,4 @@ class TestDummy:
         pprint(result['doc']._.svo)
         dot = result['dot']
         dot.render('temp/dummy.gv')
+

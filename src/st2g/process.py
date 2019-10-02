@@ -4,12 +4,19 @@ import sys
 from pprint import pprint
 from collections import OrderedDict
 from uuid import uuid4
-from functools import reduce
+from functools import reduce, partial
 import configparser
 import spacy
 from spacy.pipeline import EntityRuler
 from spacy.tokens import Doc, Span, Token
 from graphviz import Digraph
+
+
+def load_operations():
+    fpath = reduce(os.path.join, ['.', 'src', 'st2g', 'rules', 'operations.cfg'])
+    with open(fpath, 'r') as fin:
+        operations = fin.readlines()
+    return [_.strip() for _ in operations if len(_.strip())]
 
 
 def load_ini():
@@ -48,11 +55,18 @@ def set_custom_boundaries(doc):
     return doc
 
 
-def extract_relation_identifier(doc):
-    return doc.root
+def extract_relation_identifier(doc, use_root_word=True, operations=None):
+    if use_root_word and not operations:
+        return doc.root
+    elif use_root_word and operations:
+        if doc.root.lemma_.lower() not in operations:
+            return None
+        return doc.root
+    else:
+        raise NotImplementedError
 
 
-def svo_extraction(doc, focusing=('Pronoun', 'IP', 'Filename', 'URL', 'Host'), threshold=0.9):
+def svo_extraction(doc, focusing=('Pronoun', 'IP', 'Filename'), threshold=0.9, operations=None):
     """
     three pass coreference resolution + svo extraction
     1. high recall detection
@@ -106,7 +120,9 @@ def svo_extraction(doc, focusing=('Pronoun', 'IP', 'Filename', 'URL', 'Host'), t
         if len(related) < 2 or all([e.label_ == "Pronoun" for e in related]):
             continue
         so = [(r, reverse_track[r]) for r in related]
-        v = extract_relation_identifier(sent)
+        v = extract_relation_identifier(sent, operations=operations)
+        if not v:  # invalid root word or no root word
+            continue
         results.append((v, so, sent))
     svo['entities'] = reverse_track
     svo['results'] = results
@@ -122,12 +138,13 @@ def setup():
         return setup_cache
     nlp = spacy.load('en_core_web_sm')
     patterns = load_ini()
+    operations = load_operations()
     ruler = EntityRuler(nlp, overwrite_ents=True)
     ruler.add_patterns(patterns)
     nlp.add_pipe(ruler)
     nlp.add_pipe(set_custom_boundaries, before="parser")
     Doc.set_extension("svo", default=None)
-    nlp.add_pipe(svo_extraction, last=True)
+    nlp.add_pipe(partial(svo_extraction, operations=operations), last=True)
     setup_cache = {
         'nlp': nlp,
         'patterns': patterns,
