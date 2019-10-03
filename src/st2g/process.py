@@ -12,6 +12,9 @@ from spacy.tokens import Doc, Span, Token
 from graphviz import Digraph
 
 
+# -------------------------------------------- init funcs
+
+
 def load_operations():
     fpath = reduce(os.path.join, ['.', 'src', 'st2g', 'rules', 'operations.cfg'])
     with open(fpath, 'r') as fin:
@@ -48,6 +51,9 @@ def load_ini():
     return ret
 
 
+# -------------------------------------------- pipeline funcs
+
+
 def set_custom_boundaries(doc):
     for token in doc[:-1]:
         if token.text == "%":
@@ -55,15 +61,37 @@ def set_custom_boundaries(doc):
     return doc
 
 
-def extract_relation_identifier(doc, use_root_word=True, operations=None):
-    if use_root_word and not operations:
-        return doc.root
-    elif use_root_word and operations:
-        if doc.root.lemma_.lower() not in operations:
+def extract_sentence_root(doc, operations=None, pos_tag_check=True):
+    """
+    Extract core verb from a whole sentence, not considering which s and o that we care
+    """
+    ret = doc.root
+    if operations:  # check if the verb is within that operation list
+        if ret.lemma_.lower() not in operations:
             return None
-        return doc.root
-    else:
-        raise NotImplementedError
+    if pos_tag_check:
+        if ret.pos_ not in ['VERB']:
+            return None
+    return ret
+
+
+def extract_relation_identifier(doc, s, o, **kwargs):
+    # get lca
+    v = doc[doc.get_lca_matrix()[s.i - doc.start][o.i - doc.start]]
+    if kwargs['operations']:
+        if v.lemma_.lower() not in kwargs['operations']:
+            return None
+    if 'pos_check' not in kwargs or kwargs['pos_check']:
+        if v.pos_ not in ['VERB']:
+            return None
+    if 'order_check' not in kwargs or kwargs['order_check']:  # imperfect
+        if o.i > s.i:
+            return None
+    if 'dep_check' not in kwargs or kwargs['dep_check']:  # defect: dep_ not accurate for NERs
+        print(s.dep_, o.dep_)
+        if "sub" not in s.dep_ and "mod" not in s.dep_:
+            return None
+    return v
 
 
 def svo_extraction(doc, focusing=('Pronoun', 'IP', 'Filename'), threshold=0.9, operations=None):
@@ -120,10 +148,15 @@ def svo_extraction(doc, focusing=('Pronoun', 'IP', 'Filename'), threshold=0.9, o
         if len(related) < 2 or all([e.label_ == "Pronoun" for e in related]):
             continue
         so = [(r, reverse_track[r]) for r in related]
-        v = extract_relation_identifier(sent, operations=operations)
-        if not v:  # invalid root word or no root word
-            continue
-        results.append((v, so, sent))
+        # we split al v-so pairs so that we can extract verb for each of them
+        for s in so:
+            for o in so:
+                if o[0][0].i == s[0][0].i:  # use the first token to represent the span
+                    continue
+                v = extract_relation_identifier(sent, s[0][0], o[0][0], operations=operations, dep_check=False)
+                if not v:  # invalid root word or no root word
+                    continue
+                results.append((s, v, o, sent))
     svo['entities'] = reverse_track
     svo['results'] = results
     return doc
@@ -153,27 +186,11 @@ def setup():
     return setup_cache
 
 
-def display_doc(doc):
-    seq = [("text", "lemma", "pos", "tag", "dep", "shape", "is_alpha", "is_stop")]
-    for token in doc:
-        current = (token.text, token.lemma_, token.pos_, token.tag_, token.dep_,
-                   token.shape_, token.is_alpha, token.is_stop)
-        seq.append(current)
-    ret = {'ent': [(ent.text, ent.label_) for ent in doc.ents], 'seq': seq}
-    return ret
-
-
-def run_spacy_pipeline(raw):
-    nlp = setup()['nlp']
-    doc = nlp(raw)
-    return doc
-
-
 def construct_dot(doc, title="Default Behaviour Graph"):
     dot = Digraph(comment=title, format='svg')
     nodes = {}
-    for v, so, sent in doc._.svo['results']:
-        for name, uid in so:
+    for s, v, o, sent in doc._.svo['results']:
+        for name, uid in [s, o]:
             if uid in nodes:
                 if name not in nodes[uid]:
                     nodes[uid].append(name)
@@ -188,14 +205,17 @@ def construct_dot(doc, title="Default Behaviour Graph"):
         dot.node(uid, merge_names(names))
     edge_idx = 0
     evidence = {}
-    for v, so, sent in doc._.svo['results']:
-        s = so[0]
-        os = so[1:]
-        for o in os:
-            dot.edge(s[1], o[1], "{} [{}]".format(str(v), edge_idx))
-            evidence[edge_idx] = str(sent)
-            edge_idx += 1
+    for s, v, o, sent in doc._.svo['results']:
+        dot.edge(s[1], o[1], "{} [{}]".format(str(v), edge_idx))
+        evidence[edge_idx] = str(sent)
+        edge_idx += 1
     return dot, evidence
+
+
+def run_spacy_pipeline(raw):
+    nlp = setup()['nlp']
+    doc = nlp(raw)
+    return doc
 
 
 def process_raw_text(raw):
@@ -207,6 +227,9 @@ def process_raw_text(raw):
         "dot": dot,
         "evidence": evidence,
     }
+
+
+# -------------------------------------------- output funcs
 
 
 def output_result(result, target="temp.gv"):
@@ -222,3 +245,13 @@ def output_result(result, target="temp.gv"):
 def output_results(results, target=os.path.join(".", "temp")):
     for i, r in results:
         output_result(r, os.path.join(target, str(i) + ".gv"))
+
+
+def display_doc(doc):
+    seq = [("text", "lemma", "pos", "tag", "dep", "shape", "is_alpha", "is_stop")]
+    for token in doc:
+        current = (token.text, token.lemma_, token.pos_, token.tag_, token.dep_,
+                   token.shape_, token.is_alpha, token.is_stop)
+        seq.append(current)
+    ret = {'ent': [(ent.text, ent.label_) for ent in doc.ents], 'seq': seq}
+    return ret
