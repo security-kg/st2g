@@ -75,6 +75,10 @@ def extract_sentence_root(doc, operations=None, pos_tag_check=True):
     return ret
 
 
+def check_passive(s, v, o):
+    return v.text != v.lemma_ and v.text.endswith("ed")
+
+
 def extract_relation_identifier(doc, s, o, **kwargs):
     # get lca
     v = doc[doc.get_lca_matrix()[s.i - doc.start][o.i - doc.start]]
@@ -85,7 +89,7 @@ def extract_relation_identifier(doc, s, o, **kwargs):
         if v.pos_ not in ['VERB']:
             return None
     if 'order_check' not in kwargs or kwargs['order_check']:  # imperfect
-        if o.i > s.i:
+        if o.i < s.i:
             return None
     if 'dep_check' not in kwargs or kwargs['dep_check']:  # defect: dep_ not accurate for NERs
         print(s.dep_, o.dep_)
@@ -94,7 +98,7 @@ def extract_relation_identifier(doc, s, o, **kwargs):
     return v
 
 
-def svo_extraction(doc, focusing=('Pronoun', 'IP', 'Filename'), threshold=0.9, operations=None):
+def svo_extraction(doc, focusing=('Pronoun', 'IP', 'Filename'), threshold=0.95, operations=None, reverse_passive=True):
     """
     three pass coreference resolution + svo extraction
     1. high recall detection
@@ -156,7 +160,10 @@ def svo_extraction(doc, focusing=('Pronoun', 'IP', 'Filename'), threshold=0.9, o
                 v = extract_relation_identifier(sent, s[0][0], o[0][0], operations=operations, dep_check=False)
                 if not v:  # invalid root word or no root word
                     continue
-                results.append((s, v, o, sent))
+                if reverse_passive and check_passive(s, v, o):
+                    results.append((o, v, s, sent))
+                else:
+                    results.append((s, v, o, sent))
     svo['entities'] = reverse_track
     svo['results'] = results
     return doc
@@ -169,7 +176,7 @@ def setup():
     global setup_cache
     if setup_cache:
         return setup_cache
-    nlp = spacy.load('en_core_web_sm')
+    nlp = spacy.load('en_core_web_sm')  # en_core_web_lg
     patterns = load_ini()
     operations = load_operations()
     ruler = EntityRuler(nlp, overwrite_ents=True)
@@ -206,7 +213,7 @@ def construct_dot(doc, title="Default Behaviour Graph"):
     edge_idx = 0
     evidence = {}
     for s, v, o, sent in doc._.svo['results']:
-        dot.edge(s[1], o[1], "{} [{}]".format(str(v), edge_idx))
+        dot.edge(s[1], o[1], "{} ({}) [{}]".format(v.lemma_, v.text, edge_idx))
         evidence[edge_idx] = str(sent)
         edge_idx += 1
     return dot, evidence
