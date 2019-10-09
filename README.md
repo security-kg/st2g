@@ -3,6 +3,7 @@ Covert security articles to graph representations
 
 ## How to install
 ```
+apt-get install graphviz  # for ubuntu, similar command for other platform
 pip3 install -e .
 python3 -m spacy download en_core_web_sm
 ```
