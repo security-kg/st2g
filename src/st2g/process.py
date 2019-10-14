@@ -10,24 +10,27 @@ import spacy
 from spacy.pipeline import EntityRuler
 from spacy.tokens import Doc, Span, Token
 from graphviz import Digraph
-
+import pkg_resources
 
 # -------------------------------------------- init funcs
 
 
 def load_operations():
-    fpath = reduce(os.path.join, ['.', 'src', 'st2g', 'rules', 'operations.cfg'])
-    with open(fpath, 'r') as fin:
+    fpath = reduce(os.path.join, ['rules', 'operations.cfg'])
+    with pkg_resources.resource_stream("st2g", fpath) as fin:
         operations = fin.readlines()
-    return [_.strip() for _ in operations if len(_.strip())]
+    return [_.decode("UTF-8").strip() for _ in operations if len(_.strip())]
 
 
 def load_ini():
     config = configparser.ConfigParser()
-    fpath = reduce(os.path.join, ['.', 'src', 'st2g', 'rules', 'patterns.ini'])
-    config.read(fpath)
+    fpath = reduce(os.path.join, ['rules', 'patterns.ini'])
+    with pkg_resources.resource_stream("st2g", fpath) as fin:
+        binary_config = fin.read()
+    config.read_string(binary_config.decode("UTF-8"))
     patterns, defang = {}, {}
     for ind_type in config.sections():
+        print(ind_type)
         try:
             ind_pattern = config.get(ind_type, 'pattern')
         except:
@@ -179,6 +182,7 @@ def setup():
     nlp = spacy.load('en_core_web_sm')  # en_core_web_lg
     patterns = load_ini()
     operations = load_operations()
+    print(operations)
     ruler = EntityRuler(nlp, overwrite_ents=True)
     ruler.add_patterns(patterns)
     nlp.add_pipe(ruler)
