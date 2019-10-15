@@ -1,6 +1,6 @@
 # entry point of the package
 import argparse
-from st2g.process import process_raw_text
+from st2g.process import process_raw_text, output_result
 
 
 def main(unparsed_args=None):
@@ -20,8 +20,7 @@ def main(unparsed_args=None):
         with open(args.input, 'r') as fin:
             content = fin.read()
         result = process_raw_text(content)
-        dot = result['dot']
-        dot.render(args.output)
+        output_result(result, args.output)
 
 
 if __name__ == "__main__":
