@@ -30,7 +30,6 @@ def load_ini():
     config.read_string(binary_config.decode("UTF-8"))
     patterns, defang = {}, {}
     for ind_type in config.sections():
-        print(ind_type)
         try:
             ind_pattern = config.get(ind_type, 'pattern')
         except:
@@ -167,7 +166,7 @@ def svo_extraction(doc, focusing=('Pronoun', 'IP', 'Filename'), threshold=0.95, 
                     results.append((o, v, s, sent))
                 else:
                     results.append((s, v, o, sent))
-    svo['entities'] = reverse_track
+    svo['entities'] = reverse_track  # dict: entity -> id
     svo['results'] = results
     return doc
 
@@ -182,7 +181,6 @@ def setup():
     nlp = spacy.load('en_core_web_sm')  # en_core_web_lg
     patterns = load_ini()
     operations = load_operations()
-    print(operations)
     ruler = EntityRuler(nlp, overwrite_ents=True)
     ruler.add_patterns(patterns)
     nlp.add_pipe(ruler)
@@ -207,17 +205,23 @@ def construct_dot(doc, title="Default Behaviour Graph"):
                     nodes[uid].append(name)
             else:
                 nodes[uid] = [name]
+    entities = doc._.svo['entities']
+    uidToType = {v: k.label_ for k, v in entities.items() if k.label_ != "Pronoun"}
     for uid, names in nodes.items():
         def merge_names(names):
             names = list(set(map(str, names)))
-            names = sorted(names, key=lambda name: len(name))
-            return "{} ({})".format(names[-1], ",".join(names[:-1])) if len(names) > 1 else names[0]
+            return sorted(names, key=lambda name: len(name))
 
-        dot.node(uid, merge_names(names))
+        merged_names = merge_names(names)
+        if len(merged_names) > 1:
+            dot.node(uid, merged_names[-1], xlabel=uidToType[uid], comment=",".join(merged_names[:-1]))
+        else:
+            dot.node(uid, merged_names[-1], xlabel=uidToType[uid])
     edge_idx = 0
     evidence = {}
     for s, v, o, sent in doc._.svo['results']:
-        dot.edge(s[1], o[1], "{} ({}) [{}]".format(v.lemma_, v.text, edge_idx))
+        # dot.edge(s[1], o[1], "{} ({}) [{}]".format(v.lemma_, v.text, edge_idx))
+        dot.edge(s[1], o[1], v.lemma_, xlabel="[{}]".format(edge_idx), comment=v.text)
         evidence[edge_idx] = str(sent)
         edge_idx += 1
     return dot, evidence
