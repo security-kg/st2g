@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 # import re
 from pprint import pprint
@@ -8,9 +9,11 @@ from functools import reduce, partial
 import configparser
 import spacy
 from spacy.pipeline import EntityRuler
+from spacy.tokenizer import Tokenizer
 from spacy.tokens import Doc, Span, Token
 from graphviz import Digraph
 import pkg_resources
+
 
 # -------------------------------------------- init funcs
 
@@ -56,9 +59,24 @@ def load_ini():
 # -------------------------------------------- pipeline funcs
 
 
+def custom_tokenizer(nlp):
+    """
+    Dirty hack targeting tokenizer to make filepath together
+    """
+    prefix_re = spacy.util.compile_prefix_regex(nlp.Defaults.prefixes)
+    suffix_re = spacy.util.compile_suffix_regex(nlp.Defaults.suffixes)
+    infix_re = spacy.util.compile_infix_regex(nlp.Defaults.infixes)
+    token_match = re.compile(r'(/[^/ ]*)+/?')
+
+    return Tokenizer(nlp.vocab, prefix_search=prefix_re.search,
+                     suffix_search=suffix_re.search,
+                     infix_finditer=infix_re.finditer,
+                     token_match=token_match.match)
+
+
 def set_custom_boundaries(doc):
     for token in doc[:-1]:
-        if token.text == "%":
+        if token.text in ["%", '/']:
             doc[token.i + 1].is_sent_start = False
     return doc
 
@@ -100,7 +118,8 @@ def extract_relation_identifier(doc, s, o, **kwargs):
     return v
 
 
-def svo_extraction(doc, focusing=('Pronoun', 'IP', 'Filename'), threshold=0.95, operations=None, reverse_passive=True):
+def svo_extraction(doc, focusing=('Pronoun', 'IP', 'Filename', 'WindowsFilepath', 'LinuxFilepath'), threshold=0.95,
+                   operations=None, reverse_passive=True):
     """
     three pass coreference resolution + svo extraction
     1. high recall detection
@@ -131,7 +150,7 @@ def svo_extraction(doc, focusing=('Pronoun', 'IP', 'Filename'), threshold=0.95, 
             if e not in id_entities:  # new one
                 id_entities[e] = [e]
                 reverse_track[e] = uuid4().hex
-            if any([token.dep_ == 'nsubj' for token in e]):
+            if any(['nsubj' in token.dep_ for token in e]):
                 last = e  # record last entity as nsubj
     # 3. post-process removing *is done together with*
     # 4. core verb extraction within sentence
@@ -155,17 +174,21 @@ def svo_extraction(doc, focusing=('Pronoun', 'IP', 'Filename'), threshold=0.95, 
             continue
         so = [(r, reverse_track[r]) for r in related]
         # we split al v-so pairs so that we can extract verb for each of them
-        for s in so:
-            for o in so:
+        for o in so:
+            for s in so:
                 if o[0][0].i == s[0][0].i:  # use the first token to represent the span
                     continue
                 v = extract_relation_identifier(sent, s[0][0], o[0][0], operations=operations, dep_check=False)
                 if not v:  # invalid root word or no root word
                     continue
                 if reverse_passive and check_passive(s, v, o):
-                    results.append((o, v, s, sent))
+                    results.append((o, v, s, sent))  # non-subjects can be used only once
+                    if "nsubj" not in s[0][0].dep_:
+                        break
                 else:
-                    results.append((s, v, o, sent))
+                    results.append((s, v, o, sent))  # non-subjects can be used only once
+                    if "nsubj" not in o[0][0].dep_:
+                        break
     svo['entities'] = reverse_track  # dict: entity -> id
     svo['results'] = results
     return doc
@@ -179,6 +202,7 @@ def setup():
     if setup_cache:
         return setup_cache
     nlp = spacy.load('en_core_web_sm')  # en_core_web_lg
+    nlp.tokenizer = custom_tokenizer(nlp)
     patterns = load_ini()
     operations = load_operations()
     ruler = EntityRuler(nlp, overwrite_ents=True)
