@@ -4,6 +4,7 @@ from st2g.process import process_raw_text, output_result
 
 
 def main(unparsed_args=None):
+    print("hahah")
     parser = argparse.ArgumentParser()
     parser.add_argument("--version", "-v", action="version", version="st2g 0.0")
     parser.add_argument("command", nargs="?", default="run")

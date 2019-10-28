@@ -48,11 +48,11 @@ def load_ini():
             defang[ind_type] = True
     # convert to spacy pattern format
     ret = []
+    # add additional entities
+    ret.append({'label': "Pronoun", 'pattern': [{"POS": "PRON", "IS_ALPHA": True}]})
     for k, v in patterns.items():
         cur = {'label': k, 'pattern': [{"TEXT": {"REGEX": v}}]}
         ret.append(cur)
-    # add additional entities
-    ret.append({'label': "Pronoun", 'pattern': [{"POS": "PRON"}]})
     return ret
 
 
