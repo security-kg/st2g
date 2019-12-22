@@ -201,7 +201,7 @@ def setup():
     global setup_cache
     if setup_cache:
         return setup_cache
-    nlp = spacy.load('en_core_web_sm')  # en_core_web_lg
+    nlp = spacy.load('en_core_web_lg')  # en_core_web_sm
     nlp.tokenizer = custom_tokenizer(nlp)
     patterns = load_ini()
     operations = load_operations()
