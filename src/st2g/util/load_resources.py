@@ -3,6 +3,7 @@ import pkg_resources
 import configparser
 from functools import reduce
 
+
 def load_ini():
     config = configparser.ConfigParser()
     fpath = reduce(os.path.join, ['rules', 'patterns.ini'])
@@ -25,16 +26,24 @@ def load_ini():
         if ind_defang:
             defang[ind_type] = True
     # convert to spacy pattern format
-    ret = []
+    ret = [{'label': "Pronoun", 'pattern': [{"POS": "PRON", "IS_ALPHA": True}]}]
     # add additional entities
-    ret.append({'label': "Pronoun", 'pattern': [{"POS": "PRON", "IS_ALPHA": True}]})
     for k, v in patterns.items():
         cur = {'label': k, 'pattern': [{"TEXT": {"REGEX": v}}]}
         ret.append(cur)
     return ret
+
 
 def load_operations():
     fpath = reduce(os.path.join, ['rules', 'operations.cfg'])
     with pkg_resources.resource_stream("st2g", fpath) as fin:
         operations = fin.readlines()
     return [_.decode("UTF-8").strip() for _ in operations if len(_.strip())]
+
+
+def load_replacements():
+    fpath = reduce(os.path.join, ['rules', 'replacements.cfg'])
+    with pkg_resources.resource_stream("st2g", fpath) as fin:
+        operations = fin.readlines()
+    temp = [_.decode("UTF-8").strip().split(" -> ") for _ in operations if len(_.strip())]
+    return {k: v for k, v in temp}

@@ -20,7 +20,7 @@ from spacy.pipeline import EntityRuler
 from spacy.tokenizer import Tokenizer
 from typing import List, Dict, Tuple, Type
 
-from st2g.util.load_resources import load_ini, load_operations
+from st2g.util.load_resources import load_ini, load_operations, load_replacements
 
 Span: Type = Tuple[int, int]
 NamedEntityType: Type = str
@@ -33,6 +33,7 @@ Sentence: Type = str
 
 patterns = load_ini()
 operations = load_operations()
+SPACY_MODEL = "en_core_web_lg"
 
 
 class SentTree:
@@ -57,7 +58,7 @@ def contentToBlocks(content: TextContent) -> List[TextBlock]:
 # init NER tools
 
 
-nlp_NER = spacy.load('en_core_web_lg')
+nlp_NER = spacy.load(SPACY_MODEL)
 
 
 def custom_tokenizer(nlp):
@@ -89,15 +90,60 @@ def runNERinBlock(block: TextBlock,
         if entity.label_ not in focus:
             continue
         ret[entity.label_].append((entity.start_char, entity.end_char))
+    for k in ret.keys():
+        ret[k] = sorted(ret[k])
     return ret
 
 
+replacements = load_replacements()
+
+
 def replaceSpanUsingNE(block: TextBlock, ne: NER_Labels) -> Tuple[TextBlock, ReplacementRecord]:
-    pass  # TODO
+    # Dict[Span, Tuple[str, NamedEntityType]]: new span -> (old string, ne type)
+    to_be_replaced = {}
+    for k, target_word in replacements.items():
+        if k not in ne:
+            continue  # wrong entry in replacements
+        spans = ne[k]
+        for s in spans:
+            to_be_replaced[s] = (target_word, block[s[0]:s[1]], k)
+    # replace part by part
+    new_block: TextBlock = ""
+    rr = {}
+    cur = 0
+    for l, r in sorted(to_be_replaced.keys()):
+        target_word, old_text, ne_type = to_be_replaced[(l, r)]
+        if cur < l:
+            new_block = new_block + block[cur: l]
+            cur = r
+        rr[len(new_block), len(new_block)+len(target_word)] = (old_text, ne_type)
+        new_block = new_block + target_word
+    if cur < len(block):
+        new_block = new_block + block[cur:]
+    return new_block, rr
+
+
+# blockToSentence Init
+nlp_bts = spacy.load(SPACY_MODEL)
 
 
 def blockToSentences(block: TextBlock) -> List[Sentence]:
-    pass  # TODO
+    doc = nlp_bts(block)
+    # debug
+    total_len = 0
+    ret = []
+    for s in doc.sents:
+        l, r = s.doc[s.start].idx, (s.doc[s.end-1].idx+len(s.doc[s.end-1]))
+        assert l >= total_len
+        if l > total_len:
+            ret.append(block[total_len:l])
+            total_len = l
+        ret.append(block[l: r])
+        total_len += r - l
+        assert total_len == r
+    if len(block) > total_len:
+        ret.append(block[total_len:])
+    return ret
 
 
 def findCorefs(trees: List[SentTree]) -> None:
