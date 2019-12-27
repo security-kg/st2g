@@ -16,3 +16,7 @@ def test_main_asking_version():
 def test_main_help():
     with raises(SystemExit):
         main("-h")
+
+
+def test_main_process():
+    main("run --input examples/data/demo/1.txt --output temp/e2e")

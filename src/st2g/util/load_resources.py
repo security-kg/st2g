@@ -4,7 +4,7 @@ import configparser
 from functools import reduce
 
 
-def load_ini():
+def load_ini(add_pron=True):
     config = configparser.ConfigParser()
     fpath = reduce(os.path.join, ['rules', 'patterns.ini'])
     with pkg_resources.resource_stream("st2g", fpath) as fin:
@@ -26,7 +26,9 @@ def load_ini():
         if ind_defang:
             defang[ind_type] = True
     # convert to spacy pattern format
-    ret = [{'label': "Pronoun", 'pattern': [{"POS": "PRON", "IS_ALPHA": True}]}]
+    ret = []
+    if add_pron:
+        ret.append({'label': "Pronoun", 'pattern': [{"POS": "PRON", "IS_ALPHA": True}]})
     # add additional entities
     for k, v in patterns.items():
         cur = {'label': k, 'pattern': [{"TEXT": {"REGEX": v}}]}

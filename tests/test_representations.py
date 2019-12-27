@@ -6,15 +6,16 @@ from pprint import pprint
 import st2g.representations as rep
 
 
-class Test_TC:
+class Test_Rep:
     text_path = reduce(os.path.join, ['.', 'examples', 'data', 'TC', 'TC3.3.input.txt'])
-    text_path = reduce(os.path.join, ['.', 'examples', 'data', 'demo', '1.txt'])
+    text_path = reduce(os.path.join, ['.', 'examples', 'data', 'demo', '2.txt'])
+    text_path = reduce(os.path.join, ['.', 'examples', 'data', 'TC', 'TC_C_2.txt'])
     if not os.path.exists(text_path):
         pytest.skip("skipping tests without TC", allow_module_level=True)
 
     @pytest.fixture
     def text_raw(self):
-        with open(Test_TC.text_path) as fin:
+        with open(Test_Rep.text_path) as fin:
             return fin.read()
 
     def test_load_TC(self, text_raw):
@@ -71,3 +72,13 @@ class Test_TC:
         print([len(s) for s in sents])
         print("-"*30+" Sents "+"-"*30)
         pprint(sents)
+
+    def test_pipeline(self, text_raw):
+        print()
+        print("-"*30+" Original "+"-"*30)
+        print(text_raw)
+        print("-"*30+" Processed "+"-"*30)
+        result = rep.processContent(text_raw)
+        pprint(result)
+        dot = rep.visualizeProcessedContent(result)
+        dot.render('temp/dp.gv')

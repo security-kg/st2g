@@ -1,10 +1,11 @@
 # entry point of the package
 import argparse
 from st2g.process import process_raw_text, output_result
+from st2g.representations import processContent, visualizeProcessedContent
+from st2g.relation_extraction import runRelationExtraction, convertEntitiesRelationsIntoDot
 
 
 def main(unparsed_args=None):
-    print("hahah")
     parser = argparse.ArgumentParser()
     parser.add_argument("--version", "-v", action="version", version="st2g 0.0")
     parser.add_argument("command", nargs="?", default="run")
@@ -17,11 +18,21 @@ def main(unparsed_args=None):
     else:
         args = parser.parse_args()
 
-    if args.command == "run":
+    if args.command == "old_run":
         with open(args.input, 'r') as fin:
             content = fin.read()
         result = process_raw_text(content)
         output_result(result, args.output)
+    elif args.command == "run":
+        with open(args.input, 'r') as fin:
+            content = fin.read()
+        result = processContent(content)
+        dot = visualizeProcessedContent(result)
+        dot.render(args.output+".dp")
+        agg_result = sum(result, [])
+        entities, relations = runRelationExtraction(agg_result)
+        dot = convertEntitiesRelationsIntoDot(entities, relations)
+        dot.render(args.output)
 
 
 if __name__ == "__main__":
