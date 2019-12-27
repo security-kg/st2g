@@ -10,8 +10,8 @@ import st2g.relation_extraction as rele  # to distinguish from re
 
 class Test_RE:
     text_path = reduce(os.path.join, ['.', 'examples', 'data', 'TC', 'TC3.3.input.txt'])
-    text_path = reduce(os.path.join, ['.', 'examples', 'data', 'demo', '2.txt'])
-    text_path = reduce(os.path.join, ['.', 'examples', 'data', 'TC', 'TC_C_2.txt'])
+    text_path = reduce(os.path.join, ['.', 'examples', 'data', 'demo', '1.txt'])
+    text_path = reduce(os.path.join, ['.', 'examples', 'data', 'TC', 'TC_C_1.txt'])
     if not os.path.exists(text_path):
         pytest.skip("skipping tests without TC", allow_module_level=True)
 

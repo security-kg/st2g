@@ -7,9 +7,9 @@ import st2g.representations as rep
 
 
 class Test_Rep:
-    text_path = reduce(os.path.join, ['.', 'examples', 'data', 'TC', 'TC3.3.input.txt'])
+    #text_path = reduce(os.path.join, ['.', 'examples', 'data', 'TC', 'TC3.3.input.txt'])
     text_path = reduce(os.path.join, ['.', 'examples', 'data', 'demo', '2.txt'])
-    text_path = reduce(os.path.join, ['.', 'examples', 'data', 'TC', 'TC_C_2.txt'])
+    #text_path = reduce(os.path.join, ['.', 'examples', 'data', 'TC', 'TC_C_2.txt'])
     if not os.path.exists(text_path):
         pytest.skip("skipping tests without TC", allow_module_level=True)
 

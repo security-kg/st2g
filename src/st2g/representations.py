@@ -211,7 +211,9 @@ def parseDependency(sent: Sentence) -> SentTree:
     for token in doc:
         l, r = get_token_l_r(token)
         nodes[(l, r)] = {"dep_text": token.text}
-        if token.pos_ == "PRON" and token.is_alpha and token.tag_ not in ['PRP$', 'WDT']:
+        if token.pos_ == "PRON" and token.is_alpha \
+                and token.tag_ not in ['PRP$', 'WDT'] \
+                and token.text.lower() not in ["he", "she"]:
             # we don't want procession like "their" so we ruled out certain tags
             nodes[(l, r)]["is_pron"] = True
             nodes[(l, r)]["tag"] = token.tag_

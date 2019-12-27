@@ -1,4 +1,5 @@
 from copy import deepcopy
+from itertools import permutations, chain
 from typing import List, Dict, Any, Type, Tuple
 from graphviz import Digraph
 
@@ -10,7 +11,7 @@ Entity: Type = Dict
 EntityId: Type = int
 Entities: Type = List[Entity]
 Relation: Type = Dict
-Relations: Type = Dict[Tuple[EntityId, EntityId], Relation]
+Relations: Type = List[Relation]
 
 
 def isSameEntity(text: str, meta: dict, rhs: Entity) -> bool:
@@ -56,7 +57,7 @@ def extractEntitiesFromSentList(sents: List[SentTree]) -> Entities:
         sent, nodes, edges = tree
         for span in sorted(nodes.keys()):
             v = nodes[span]
-            if "resolved" not in v:
+            if not v.get("resolved"):
                 continue
             else:
                 location = (tree_id, span)
@@ -65,116 +66,108 @@ def extractEntitiesFromSentList(sents: List[SentTree]) -> Entities:
     return entities
 
 
-def extractRelationsFromSent(tree: SentTree, entities: Entities, tree_id: int, debug=False) -> Relations:
-    pivots = {}
+def extractRelationsFromSent(tree: SentTree, entities: Entities, tree_id: int) -> Relations:
     sent, nodes, edges = tree
-    # 1. propagation
+    # list all ioc paths
+    paths = []
     for span in sorted(nodes.keys()):
         v = nodes[span]
-        if "is_pron" in v or "ioc" in v:
+        if "ioc" in v or v.get("resolved"):
             current = span
-            trace = []
+            node_trace = [current]
+            edge_trace = []
             while current is not None:
                 has_father = False
                 for (src, des), ev in edges.items():
                     if des == current:
-                        father = src
-                        trace.append(ev.get("dep"))
-                        if "is_valid_op" in nodes[father]:
-                            if father not in pivots:
-                                pivots[father] = []
-                            pivots[father].append((span, list(reversed(deepcopy(trace)))))
-                            trace.append("|")  # keep a record of all passed valid_ops
-                        current = father
+                        node_trace.append(src)
+                        edge_trace.append(ev.get("dep"))
+                        current = src
                         has_father = True
-                        break
                 if not has_father:
                     break
-    # 2. touch pivot
-    pivots = {pivot_span:trace_list for pivot_span, trace_list in pivots.items() if len(trace_list) > 1}
-    if debug:
-        for pivot_span, trace_list in pivots.items():
-            print("-" * 40)
-            print("Pivot: ", nodes[pivot_span]['lemma'], tree_id, pivot_span)
-            for entity_span, trace in trace_list:
-                print(nodes[entity_span]['text'], trace)
-    ret = {}
-    content_before_first_bar = lambda x: None if "|" not in x else tuple(x[:x.index('|')])
-    for pivot_span, trace_list in pivots.items():
-        subj_obj = False
-        for entity_span_a, trace_a in trace_list:
-            subj = any("subj" in t for t in trace_a)
-            if not subj:
-                continue
-            passive = any("subjpass" in t for t in trace_a)
-            for entity_span_b, trace_b in trace_list:  # assume a is subj and b is obj
-                if entity_span_a == entity_span_b:
+            paths.append((list(reversed(node_trace)), list(reversed(edge_trace))))
+    # evaluate all pairs
+    ret = []
+    have_subj = set()
+    # 1. check subj->obj
+    for (node_trace_a, edge_trace_a), (node_trace_b, edge_trace_b) in permutations(paths, 2):
+        # calc the common path
+        # C0, C1, C2, ..., CN -> A0, A1, A2, ...
+        # C0, C1, C2, ..., CN -> B0, B1, B2, ...
+        n = 0
+        while n < min(len(node_trace_a), len(node_trace_b)) and node_trace_a[n] == node_trace_b[n]:
+            n += 1
+        n -= 1
+        assert n >= 0  # at least they share a root
+        if not any("subj" in dep for dep in edge_trace_a[n:]):
+            continue
+        if not any("obj" in dep for dep in edge_trace_b[n:]):
+            continue
+        for span in node_trace_a[:n+1]:
+            have_subj.add(span)
+        # go and find the verb
+        for span in chain(reversed(node_trace_b), node_trace_a[n+1:]):
+            if "is_valid_op" in nodes[span]:
+                ent_a = get_entity_id_by_location((tree_id, node_trace_a[-1]), entities)
+                ent_b = get_entity_id_by_location((tree_id, node_trace_b[-1]), entities)
+                if any("subjpass" in dep for dep in edge_trace_a[n:]) \
+                        or any("agent" in dep for dep in edge_trace_b[n:]):
+                    ent_a, ent_b = ent_b, ent_a
+                ret.append({
+                    "entity_a_id": ent_a,
+                    "entity_b_id": ent_b,
+                    "operation": nodes[span]['lemma'],
+                    "occurence": (tree_id, span),
+                    "text": nodes[span]['text'],
+                })
+                break
+    # 2. check obj -> obj (human as subj)
+    for (node_trace_a, edge_trace_a), (node_trace_b, edge_trace_b) in permutations(paths, 2):
+        # calc the common path
+        # C0, C1, C2, ..., CN -> A0, A1, A2, ...
+        # C0, C1, C2, ..., CN -> B0, B1, B2, ...
+        n = 0
+        while n < min(len(node_trace_a), len(node_trace_b)) and node_trace_a[n] == node_trace_b[n]:
+            n += 1
+        n -= 1
+        assert n >= 0  # at least they share a root
+        if len(node_trace_a) > len(node_trace_b) \
+                or (len(node_trace_a) == len(node_trace_b) and node_trace_a[-1][0] > node_trace_b[-1][0]):
+            continue  # we prefer the shorter or earlier one as the possible sub
+        if any(node in have_subj for node in node_trace_a[:n+1]):
+            continue
+        if not any("obj" in dep for dep in edge_trace_a):
+            continue
+        if not any("obj" in dep for dep in edge_trace_b[n:]):
+            continue
+        # go and find the verb
+        for span in chain(reversed(node_trace_b), node_trace_a[n+1:]):
+            if "is_valid_op" in nodes[span]:
+                ent_a = get_entity_id_by_location((tree_id, node_trace_a[-1]), entities)
+                ent_b = get_entity_id_by_location((tree_id, node_trace_b[-1]), entities)
+                # no need to deal with passive this time
+                if ent_a == ent_b:
                     continue
-                if not any("obj" in t for t in trace_b):
-                    continue
-                if content_before_first_bar(trace_a) and content_before_first_bar(trace_b):
-                    if content_before_first_bar(trace_a) == content_before_first_bar(trace_b):
-                        continue  # there should be a more proper verb
-                location_a = (tree_id, entity_span_a)
-                location_b = (tree_id, entity_span_b)
-                ent_id_a = get_entity_id_by_location(location_a, entities)
-                ent_id_b = get_entity_id_by_location(location_b, entities)
-                if passive:
-                    ent_id_a, ent_id_b = ent_id_b, ent_id_a
-                assert (ent_id_b, ent_id_a) not in ret
-                if (ent_id_a, ent_id_b) in ret:
-                    ret[(ent_id_a, ent_id_b)]["occurences"].append((tree_id, pivot_span))
-                    ret[(ent_id_a, ent_id_b)]["texts"].append(nodes[pivot_span]['text'])
-                else:
-                    ret[(ent_id_a, ent_id_b)] = {
-                        "operation": nodes[pivot_span]['lemma'],
-                        "occurences": [(tree_id, pivot_span)],
-                        "texts": [nodes[pivot_span]['text']],
-                    }
-                subj_obj = True
-        if not subj_obj:
-            # consider obj-obj for
-            for entity_span_a, trace_a in trace_list:
-                obj = any("obj" in t for t in trace_a)
-                if not obj:
-                    continue
-                for entity_span_b, trace_b in trace_list:  # assume a is subj and b is obj
-                    if len(trace_a) >= len(trace_b):
-                        continue
-                    if tuple(trace_a) != tuple(trace_b[:len(trace_a)]):
-                        continue
-                    if not any("obj" in t for t in trace_b[len(trace_b) - len(trace_a):]):
-                        continue
-                    if content_before_first_bar(trace_a) and content_before_first_bar(trace_b):
-                        if content_before_first_bar(trace_a) == content_before_first_bar(trace_b):
-                            continue  # there should be a more proper verb
-                    location_a = (tree_id, entity_span_a)
-                    location_b = (tree_id, entity_span_b)
-                    ent_id_a = get_entity_id_by_location(location_a, entities)
-                    ent_id_b = get_entity_id_by_location(location_b, entities)
-                    assert (ent_id_b, ent_id_a) not in ret
-                    if (ent_id_a, ent_id_b) in ret:
-                        ret[(ent_id_a, ent_id_b)]["occurences"].append((tree_id, pivot_span))
-                        ret[(ent_id_a, ent_id_b)]["texts"].append(nodes[pivot_span]['text'])
-                    else:
-                        ret[(ent_id_a, ent_id_b)] = {
-                            "operation": nodes[pivot_span]['lemma'],
-                            "occurences": [(tree_id, pivot_span)],
-                            "texts": [nodes[pivot_span]['text']],
-                        }
+                ret.append({
+                    "entity_a_id": ent_a,
+                    "entity_b_id": ent_b,
+                    "operation": nodes[span]['lemma'],
+                    "occurence": (tree_id, span),
+                    "text": nodes[span]['text'],
+                })
+                break
+
     return ret
 
 
 def extractRelationsFromSentList(trees: List[SentTree], entities: Entities) -> Relations:
-    relations: Relations = {}
+    relations: Relations = []
     for tree_id, tree in enumerate(trees):
         relations_nw = extractRelationsFromSent(tree, entities, tree_id)
-        for k, v in relations_nw.items():
-            if k in relations:
-                relations[k]["occurences"] += v["occurences"]
-                relations[k]["texts"] += v["texts"]
-            else:
-                relations[k] = v
+        relations += relations_nw
+    for i, r in enumerate(relations):
+        r['id'] = i
     return relations
 
 
@@ -188,6 +181,8 @@ def convertEntitiesRelationsIntoDot(entities: Entities, relations: Relations) ->
     dot = Digraph(comment="Default Behaviour Graph", format='svg')
     for e in entities:
         dot.node(str(e['id']), e['text'], xlabel=e['ioc'])
-    for (src, des), v in relations.items():
-        dot.edge(str(src), str(des), v['operation'])
+    for v in relations:
+        src = v['entity_a_id']
+        des = v['entity_b_id']
+        dot.edge(str(src), str(des), v['operation'], xlabel="[{}]".format(v['id']))
     return dot

@@ -19,4 +19,7 @@ def test_main_help():
 
 
 def test_main_process():
-    main("run --input examples/data/demo/1.txt --output temp/e2e")
+    main("run --input examples/data/demo/1.txt --output temp/collect/demo_1")
+    main("run --input examples/data/demo/2.txt --output temp/collect/demo_2")
+    main("run --input examples/data/TC/TC_C_1.txt --output temp/collect/tc_1")
+    main("run --input examples/data/TC/TC_C_2.txt --output temp/collect/tc_2")
