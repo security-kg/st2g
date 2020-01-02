@@ -23,3 +23,7 @@ def test_main_process():
     main("run --input examples/data/demo/2.txt --output temp/collect/demo_2")
     main("run --input examples/data/TC/TC_C_1.txt --output temp/collect/tc_1")
     main("run --input examples/data/TC/TC_C_2.txt --output temp/collect/tc_2")
+    main("run --input examples/data/TC/TC_C_3.txt --output temp/collect/tc_3")
+    main("run --input examples/data/TC/TC_C_3_2.txt --output temp/collect/tc_3_2")
+    main("run --input examples/data/TC/TC_C_4.txt --output temp/collect/tc_4")
+    main("run --input examples/data/TC/TC_C_5.txt --output temp/collect/tc_5")
