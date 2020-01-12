@@ -87,12 +87,24 @@ nlp_NER.add_pipe(ruler_NER)
 
 def runNERinBlock(block: TextBlock,
                   focus=['Pronoun', 'IP', 'Filename', 'WindowsFilepath', 'LinuxFilepath']) -> NER_Labels:
-    doc = nlp_NER(block)
     ret = {k: [] for k in focus}
-    for entity in doc.ents:
-        if entity.label_ not in focus:
+    l_r_set = set()
+    for p in patterns:
+        label = p['label']
+        if label not in focus:
             continue
-        ret[entity.label_].append((entity.start_char, entity.end_char))
+        reg = p['pattern'][0]['TEXT']['REGEX']
+        for match in re.finditer(reg, block):
+            _l, _r = match.span()
+            overlap = False
+            for l, r in l_r_set:
+                if l <= _l <= r or l <= _r <= r:
+                    overlap = True
+                    break
+            if overlap:
+                continue
+            l_r_set.add(match.span())
+            ret[label].append((match.span()))
     for k in ret.keys():
         ret[k] = sorted(ret[k])
     return ret
@@ -253,6 +265,7 @@ def restoreReplacement(tree: SentTree, rr: ReplacementRecord) -> SentTree:
         new_sent = new_sent + ori_text
         new_r = len(new_sent)
         replacement_nodes[(l, r)] = ((new_l, new_r), type)
+        # TODO: if there is a node that covers both side of this one, this is a fix for things like something%
         offset = new_r - r
     while current_node < len(all_node_keys):
         if all_node_keys[current_node] in replacement_nodes:
