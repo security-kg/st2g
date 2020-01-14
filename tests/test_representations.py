@@ -82,3 +82,13 @@ class Test_Rep:
         pprint(result)
         dot = rep.visualizeProcessedContent(result)
         dot.render('temp/dp.gv')
+
+    def test_pipeline_noprotect(self, text_raw):
+        print()
+        print("-"*30+" Original "+"-"*30)
+        print(text_raw)
+        print("-"*30+" Processed "+"-"*30)
+        result = rep.processContent(text_raw, False)
+        pprint(result)
+        dot = rep.visualizeProcessedContent(result)
+        dot.render('temp/dp.gv')

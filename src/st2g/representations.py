@@ -19,7 +19,7 @@ import spacy
 from copy import deepcopy
 from spacy.pipeline import EntityRuler
 from spacy.tokenizer import Tokenizer
-from typing import List, Dict, Tuple, Type
+from typing import List, Dict, Tuple, Type, Optional
 from graphviz import Digraph
 
 from st2g.util.load_resources import load_ini, load_operations, load_replacements
@@ -298,7 +298,11 @@ def restoreReplacement(tree: SentTree, rr: ReplacementRecord) -> SentTree:
     return new_sent, new_nodes, new_edges
 
 
-def labelVerbs(tree: SentTree, ops: List[str]=operations) -> SentTree:
+def labelVerbs(tree: SentTree,
+               protect_IOC: bool=True,
+               ne: Optional[NER_Labels]=None,
+               offset: int=0,
+               ops: List[str]=operations) -> SentTree:
     sent, nodes, edges = tree
     new_sent, new_nodes, new_edges = sent, {}, deepcopy(edges)
     doc = nlp_bts_dep(sent)
@@ -312,6 +316,13 @@ def labelVerbs(tree: SentTree, ops: List[str]=operations) -> SentTree:
             v['lemma'] = lemmat[new_sent[l: r]]
             if v['lemma'] in ops:
                 v['is_valid_op'] = True
+        if not protect_IOC:
+            # label IOCs
+            v['text'] = sent[l: r]
+            for ioc_type, spans in ne.items():
+                for span in spans:
+                    if span == (l+offset, r+offset):
+                        v['ioc'] = ioc_type
         new_nodes[k] = v
     return new_sent, new_nodes, new_edges
 
@@ -350,54 +361,70 @@ def simplifyTree(tree: SentTree) -> SentTree:
     return new_sent, new_nodes, new_edges
 
 
-def processSentence(sent: Sentence, rr: ReplacementRecord) -> SentTree:
+def processSentence(
+        sent: Sentence,
+        rr: Optional[ReplacementRecord],
+        protect_IOC: bool=True,
+        ne: Optional[NER_Labels]=None,
+        offset: int=0) -> SentTree:
     # dependency parsing
     tree = parseDependency(sent)
     # replacement restore
-    new_tree = restoreReplacement(tree, rr)
+    if protect_IOC:
+        new_tree = restoreReplacement(tree, rr)
+    else:
+        new_tree = tree
     # verb labeling
-    new_tree = labelVerbs(new_tree)
+    new_tree = labelVerbs(new_tree, protect_IOC, ne, offset)
     new_tree = simplifyTree(new_tree)
     return new_tree
 
 
-def processBlock(block: TextBlock, start_idx) -> List[SentTree]:
+def processBlock(block: TextBlock, start_idx: int, protect_IOC: bool=True) -> List[SentTree]:
     ne: NER_Labels = runNERinBlock(block)
-    new_block, rr = replaceSpanUsingNE(block, ne)
-    sentences: List[Sentence] = blockToSentences(new_block)
-    # distribute rr into each sentence
-    sent_start, sent_end = 0, len(sentences[0])
-    rr_for_sent = []
-    current_rr = {}
-    for span in sorted(rr):
-        start, end = span
-        assert start >= sent_start
-        while start >= sent_end:
-            # next sentence
-            assert len(rr_for_sent) < len(sentences) - 1
+    if protect_IOC:
+        new_block, rr = replaceSpanUsingNE(block, ne)
+        sentences: List[Sentence] = blockToSentences(new_block)
+        # distribute rr into each sentence
+        sent_start, sent_end = 0, len(sentences[0])
+        rr_for_sent = []
+        current_rr = {}
+        for span in sorted(rr):
+            start, end = span
+            assert start >= sent_start
+            while start >= sent_end:
+                # next sentence
+                assert len(rr_for_sent) < len(sentences) - 1
+                rr_for_sent.append(current_rr)
+                current_rr = {}
+                sent_start = sent_end
+                sent_end = sent_start + len(sentences[len(rr_for_sent)])
+            assert end <= sent_end
+            current_rr[(start-sent_start, end-sent_start)] = rr[span]
+        while len(rr_for_sent) < len(sentences):
             rr_for_sent.append(current_rr)
             current_rr = {}
-            sent_start = sent_end
-            sent_end = sent_start + len(sentences[len(rr_for_sent)])
-        assert end <= sent_end
-        current_rr[(start-sent_start, end-sent_start)] = rr[span]
-    while len(rr_for_sent) < len(sentences):
-        rr_for_sent.append(current_rr)
-        current_rr = {}
-    assert len(rr_for_sent) == len(sentences)
-    ret = []
-    for sent, rr in zip(sentences, rr_for_sent):
-        ret.append(processSentence(sent, rr))
+        assert len(rr_for_sent) == len(sentences)
+        ret = []
+        for sent, rr in zip(sentences, rr_for_sent):
+            ret.append(processSentence(sent, rr, protect_IOC, ne))
+    else:
+        sentences: List[Sentence] = blockToSentences(block)
+        ret = []
+        offset = 0
+        for sent in sentences:
+            ret.append(processSentence(sent, None, protect_IOC, ne, offset=offset))
+            offset += len(sent)
     findCorefs(ret, start_idx)  # annotate in the trees
     return ret
 
 
-def processContent(text_input: TextContent) -> List[List[SentTree]]:
+def processContent(text_input: TextContent, protect_IOC: bool=True) -> List[List[SentTree]]:
     blocks: List[TextBlock] = contentToBlocks(text_input)
     ret = []
     start_idx = 0
     for block in blocks:
-        ret.append(processBlock(block, start_idx))
+        ret.append(processBlock(block, start_idx, protect_IOC))
         start_idx += len(ret[-1])
     return ret
 

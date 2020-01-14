@@ -14,6 +14,7 @@ def main(unparsed_args=None):
     parser.add_argument("--output", '-o', type=str, required=True)
     parser.add_argument("--entity", '-E', action='store_true')
     parser.add_argument("--relation", '-R', action='store_true')
+    parser.add_argument("--no_protect_ioc", '-N', action='store_true')
     if unparsed_args:
         if isinstance(unparsed_args, str):
             unparsed_args = unparsed_args.split(" ")
@@ -29,7 +30,7 @@ def main(unparsed_args=None):
     elif args.command == "run":
         with open(args.input, 'r') as fin:
             content = fin.read()
-        result = processContent(content)
+        result = processContent(content, protect_IOC=bool(not args.no_protect_ioc))
         dot = visualizeProcessedContent(result)
         dot.render(args.output+".dp")
         agg_result = sum(result, [])
