@@ -428,6 +428,7 @@ def processContent(text_input: TextContent, protect_IOC: bool=True) -> List[List
         start_idx += len(ret[-1])
     return ret
 
+FONT_SIZE = str(14)
 
 def visualizeProcessedContent(result: List[List[SentTree]]) -> Digraph:
     dot = Digraph(comment="Dependency Parsing", format='svg')
@@ -442,15 +443,15 @@ def visualizeProcessedContent(result: List[List[SentTree]]) -> Digraph:
             if 'is_pron' in v:
                 display += "|PN"
                 if v.get("resolved") is not None:
-                    dot.edge(span_to_name(idx, k), span_to_name(v['resolved'][0], v['resolved'][1]), xlabel="ref", style='dotted')
+                    dot.edge(span_to_name(idx, k), span_to_name(v['resolved'][0], v['resolved'][1]), xlabel="ref", style='dotted', fontsize=FONT_SIZE)
             if 'is_valid_op' in v:
                 display += "|OP"
             if "|OP" in display:
-                dot.node(span_to_name(idx, k), display, style='filled', fillcolor='grey')
+                dot.node(span_to_name(idx, k), display, style='filled', fillcolor='grey', fontsize=FONT_SIZE)
             elif "|PN" in display or 'ioc' in v:
-                dot.node(span_to_name(idx, k), display, style='filled', fillcolor='gold')
+                dot.node(span_to_name(idx, k), display, style='filled', fillcolor='gold', fontsize=FONT_SIZE)
             else:
-                dot.node(span_to_name(idx, k), display)
+                dot.node(span_to_name(idx, k), display, fontsize=FONT_SIZE)
         for (src, des), v in edges.items():
-            dot.edge(span_to_name(idx, src), span_to_name(idx, des), xlabel=v.get('dep', "NODEP"))
+            dot.edge(span_to_name(idx, src), span_to_name(idx, des), xlabel=v.get('dep', "NODEP"), fontsize=FONT_SIZE)
     return dot

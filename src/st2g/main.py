@@ -1,5 +1,6 @@
 # entry point of the package
 import argparse
+import time
 import json
 from st2g.process import process_raw_text, output_result
 from st2g.representations import processContent, visualizeProcessedContent
@@ -15,6 +16,7 @@ def main(unparsed_args=None):
     parser.add_argument("--entity", '-E', action='store_true')
     parser.add_argument("--relation", '-R', action='store_true')
     parser.add_argument("--no_protect_ioc", '-N', action='store_true')
+    parser.add_argument("--use_ttp_drill", '-T', action='store_true')
     if unparsed_args:
         if isinstance(unparsed_args, str):
             unparsed_args = unparsed_args.split(" ")
@@ -34,7 +36,7 @@ def main(unparsed_args=None):
         dot = visualizeProcessedContent(result)
         dot.render(args.output+".dp")
         agg_result = sum(result, [])
-        entities, relations = runRelationExtraction(agg_result)
+        entities, relations = runRelationExtraction(agg_result, use_ttp_drill=bool(args.use_ttp_drill))
         if args.entity:
             with open(args.output+".e.json", 'w') as fout:
                 json.dump(entities, fout)

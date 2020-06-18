@@ -161,19 +161,22 @@ def extractRelationsFromSent(tree: SentTree, entities: Entities, tree_id: int) -
     return ret
 
 
-def extractRelationsFromSentList(trees: List[SentTree], entities: Entities) -> Relations:
+def extractRelationsFromSentList(trees: List[SentTree], entities: Entities, use_ttp_drill: bool=False) -> Relations:
     relations: Relations = []
     for tree_id, tree in enumerate(trees):
-        relations_nw = extractRelationsFromSent(tree, entities, tree_id)
+        if use_ttp_drill:
+            relations_nw = extractRelationsFromSentTTPDrill(tree, entities, tree_id)
+        else:
+            relations_nw = extractRelationsFromSent(tree, entities, tree_id)
         relations += relations_nw
     for i, r in enumerate(relations):
         r['id'] = i
     return relations
 
 
-def runRelationExtraction(sents: List[SentTree]) -> Tuple[Entities, Relations]:
+def runRelationExtraction(sents: List[SentTree], use_ttp_drill: bool=False) -> Tuple[Entities, Relations]:
     entities = extractEntitiesFromSentList(sents)
-    relations = extractRelationsFromSentList(sents, entities)
+    relations = extractRelationsFromSentList(sents, entities, use_ttp_drill)
     return entities, relations
 
 
@@ -186,3 +189,71 @@ def convertEntitiesRelationsIntoDot(entities: Entities, relations: Relations) ->
         des = v['entity_b_id']
         dot.edge(str(src), str(des), v['operation'], xlabel="[{}]".format(v['id']))
     return dot
+
+
+def extractRelationsFromSentTTPDrill(tree: SentTree, entities: Entities, tree_id: int) -> Relations:
+    """
+        In TTP Drill, the subject is always the malware, here we use the subject of the sentence
+        And in TTP Drill, the governor verb is always directly linked to the subj and obj
+        There's no nmod in spacy, so we replace that with prep->pobj combination
+        Related relation: nsubj, dobj, nsubjpass, nmod
+        prep limited to: from, to, with, via, over, for, through, using, into
+    """
+    sent, nodes, edges = tree
+    # list all ioc paths
+    paths = []
+    for span in sorted(nodes.keys()):
+        v = nodes[span]
+        if "ioc" in v or v.get("resolved"):
+            current = span
+            node_trace = [current]
+            edge_trace = []
+            while current is not None:
+                has_father = False
+                for (src, des), ev in edges.items():
+                    if des == current:
+                        node_trace.append(src)
+                        edge_trace.append(ev.get("dep"))
+                        current = src
+                        has_father = True
+                if not has_father:
+                    break
+            paths.append((list(reversed(node_trace)), list(reversed(edge_trace))))
+    # evaluate all pairs
+    ret = []
+    have_subj = set()
+    # 1. check subj->......
+    for (node_trace_a, edge_trace_a), (node_trace_b, edge_trace_b) in permutations(paths, 2):
+        # calc the common path
+        # C0, C1, C2, ..., CN -> A0, A1, A2, ...
+        # C0, C1, C2, ..., CN -> B0, B1, B2, ...
+        n = 0
+        while n < min(len(node_trace_a), len(node_trace_b)) and node_trace_a[n] == node_trace_b[n]:
+            n += 1
+        n -= 1
+        assert n >= 0  # at least they share a root
+        if len(edge_trace_a) <= n or not "subj" in edge_trace_a[n]:
+            continue
+        if len(edge_trace_b) <= n or not any((_ in edge_trace_b[n]) for _ in ["nsubj", "dobj", "nsubjpass", "nmod", "prep"]):
+            continue
+        if edge_trace_b[n] == "prep" and (len(edge_trace_b) != n+2 or edge_trace_b[n+1] != "pobj"):
+            continue
+        for span in node_trace_a[:n+1]:
+            have_subj.add(span)
+            
+        # go and find the verb
+        span = node_trace_a[n]  # must be the governer
+        if "is_valid_op" in nodes[span]:
+            ent_a = get_entity_id_by_location((tree_id, node_trace_a[-1]), entities)
+            ent_b = get_entity_id_by_location((tree_id, node_trace_b[-1]), entities)
+            if any("nsubj" in dep for dep in edge_trace_b[n:]) or any("nmod" in dep for dep in edge_trace_b[n:]):
+                ent_a, ent_b = ent_b, ent_a
+            ret.append({
+                "entity_a_id": ent_a,
+                "entity_b_id": ent_b,
+                "operation": nodes[span]['lemma'],
+                "occurence": (tree_id, span),
+                "text": nodes[span]['text'],
+            })
+
+    return ret
