@@ -16,7 +16,7 @@ setup(name='st2g',
       install_requires=[
           "argparse>=1.4.0",
           "sqlparse>=0.3.0",
-          "spacy>=2.2.1",
+          "spacy==2.2.1",
           "graphviz>=0.13",
           # "neuralcoref>=4.0",
       ],
