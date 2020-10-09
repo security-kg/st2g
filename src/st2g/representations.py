@@ -86,7 +86,7 @@ nlp_NER.add_pipe(ruler_NER)
 
 
 def runNERinBlock(block: TextBlock,
-                  focus=['Pronoun', 'IP', 'Filename', 'WindowsFilepath', 'LinuxFilepath']) -> NER_Labels:
+                  focus=['Pronoun', 'IP', 'Filename', 'WindowsFilepath', 'LinuxFilepath', 'AndroidPackage']) -> NER_Labels:
     ret = {k: [] for k in focus}
     l_r_set = set()
     for p in patterns:
