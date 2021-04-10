@@ -223,6 +223,8 @@ def parseDependency(sent: Sentence) -> SentTree:
     for token in doc:
         l, r = get_token_l_r(token)
         nodes[(l, r)] = {"dep_text": token.text}
+        nodes[(l, r)]["pos_"] = token.pos_
+        nodes[(l, r)]["dep_"] = token.dep_
         if token.pos_ == "PRON" and token.is_alpha \
                 and token.tag_ not in ['PRP$', 'WDT'] \
                 and token.text.lower() not in ["he", "she"]:
@@ -302,7 +304,7 @@ def labelVerbs(tree: SentTree,
                protect_IOC: bool=True,
                ne: Optional[NER_Labels]=None,
                offset: int=0,
-               ops: List[str]=operations) -> SentTree:
+               ops: Optional[List[str]]=operations) -> SentTree:
     sent, nodes, edges = tree
     new_sent, new_nodes, new_edges = sent, {}, deepcopy(edges)
     doc = nlp_bts_dep(sent)
@@ -314,8 +316,14 @@ def labelVerbs(tree: SentTree,
         v = deepcopy(v)
         if new_sent[l: r] in lemmat:
             v['lemma'] = lemmat[new_sent[l: r]]
-            if v['lemma'] in ops:
-                v['is_valid_op'] = True
+            if ops is None:
+                if v['dep_'] == "ROOT" or v['pos_'] == "VERB":
+                    v['is_valid_op'] = True
+                if v['lemma'] in operations:  # just in case the spacy is not accurate
+                    v['is_valid_op'] = True
+            else:
+                if v['lemma'] in ops:
+                    v['is_valid_op'] = True
         if not protect_IOC:
             # label IOCs
             v['text'] = sent[l: r]
@@ -366,7 +374,8 @@ def processSentence(
         rr: Optional[ReplacementRecord],
         protect_IOC: bool=True,
         ne: Optional[NER_Labels]=None,
-        offset: int=0) -> SentTree:
+        offset: int=0,
+        no_verb_limit: bool=False) -> SentTree:
     # dependency parsing
     tree = parseDependency(sent)
     # replacement restore
@@ -375,12 +384,12 @@ def processSentence(
     else:
         new_tree = tree
     # verb labeling
-    new_tree = labelVerbs(new_tree, protect_IOC, ne, offset)
+    new_tree = labelVerbs(new_tree, protect_IOC, ne, offset, ops=None if no_verb_limit else operations)
     new_tree = simplifyTree(new_tree)
     return new_tree
 
 
-def processBlock(block: TextBlock, start_idx: int, protect_IOC: bool=True) -> List[SentTree]:
+def processBlock(block: TextBlock, start_idx: int, protect_IOC: bool=True, no_verb_limit: bool=False) -> List[SentTree]:
     ne: NER_Labels = runNERinBlock(block)
     if protect_IOC:
         new_block, rr = replaceSpanUsingNE(block, ne)
@@ -407,24 +416,24 @@ def processBlock(block: TextBlock, start_idx: int, protect_IOC: bool=True) -> Li
         assert len(rr_for_sent) == len(sentences)
         ret = []
         for sent, rr in zip(sentences, rr_for_sent):
-            ret.append(processSentence(sent, rr, protect_IOC, ne))
+            ret.append(processSentence(sent, rr, protect_IOC, ne, no_verb_limit=no_verb_limit))
     else:
         sentences: List[Sentence] = blockToSentences(block)
         ret = []
         offset = 0
         for sent in sentences:
-            ret.append(processSentence(sent, None, protect_IOC, ne, offset=offset))
+            ret.append(processSentence(sent, None, protect_IOC, ne, offset=offset, no_verb_limit=no_verb_limit))
             offset += len(sent)
     findCorefs(ret, start_idx)  # annotate in the trees
     return ret
 
 
-def processContent(text_input: TextContent, protect_IOC: bool=True) -> List[List[SentTree]]:
+def processContent(text_input: TextContent, protect_IOC: bool=True, no_verb_limit: bool=False) -> List[List[SentTree]]:
     blocks: List[TextBlock] = contentToBlocks(text_input)
     ret = []
     start_idx = 0
     for block in blocks:
-        ret.append(processBlock(block, start_idx, protect_IOC))
+        ret.append(processBlock(block, start_idx, protect_IOC, no_verb_limit))
         start_idx += len(ret[-1])
     return ret
 
